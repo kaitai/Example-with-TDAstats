@@ -9,7 +9,6 @@ This file contains an example of the use of persistent homology on real data. We
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(igraph)
 library(TDA)
 library(BatchGetSymbols)
 library(reshape2)
@@ -96,15 +95,15 @@ Here I'll use the TDAstats package to compute persistent homology and plot barco
 
 ```{r make TDAstats list of barcodes}
 TS_barcode_function <- function(input){
-  barcode_output <- calculate_homology(input, format="distmat")
+  barcode_output <- calculate_homology(input, format="distmat", dim=2)
 }
 
 pm <- proc.time()
 TS_barcodes_list_today <- lapply(dis_mat_today,TS_barcode_function)
 
 TS_barcodes_list_fin <- lapply(dis_mat_fin,TS_barcode_function)
-total_time <- proc.time()-pm
-print(total_time)
+total_time_TDAstats <- proc.time()-pm
+print(total_time_TDAstats)
 ```
 
 Now loop through and plot:
@@ -129,8 +128,8 @@ barcode_function <- function(input){
 pm <- proc.time()
 barcodes_list_today <- lapply(dis_mat_today,barcode_function)
 barcodes_list_fin <- lapply(dis_mat_fin,barcode_function)
-total_time <- proc.time()-pm
-print(total_time)
+total_time_TDA <- proc.time()-pm
+print(total_time_TDA)
 ```
 
 
@@ -150,4 +149,15 @@ for (j in seq(from=1, to=num_time_points_today)){
 ```
 
 
+## Compare timing
+
+TDAstats is a lot faster, because Ripser is faster!
+```{r compare times}
+print(total_time_TDA)
+print(total_time_TDAstats)
+```
+
+
+## Further research, if you're curious
+The idea here is based on Marian Gidea's paper ``Topology Data Analysis of Critical Transitions in Financial Networks'', which one can find at *https://arxiv.org/abs/1701.06081*. With my students at the University of Minnesota, we're extending this work and have several papers in progress.
 
