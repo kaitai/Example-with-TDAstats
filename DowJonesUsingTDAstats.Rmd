@@ -158,6 +158,9 @@ print(total_time_TDAstats)
 ```
 
 
+## To-do
+Add Wasserstein example. 
+
 ## Further research, if you're curious
 The idea here is based on Marian Gidea's paper ``Topology Data Analysis of Critical Transitions in Financial Networks'', which one can find at *https://arxiv.org/abs/1701.06081*. With my students at the University of Minnesota, we're extending this work and have several papers in progress.
 
