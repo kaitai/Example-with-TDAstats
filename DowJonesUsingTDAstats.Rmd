@@ -1,0 +1,153 @@
+---
+title: "Analyzing network of stock correlation using TDAstats package"
+author: "Kaisa Taipale"
+date: "January 26, 2019"
+output: html_document
+---
+
+This file contains an example of the use of persistent homology on real data. We consider a small data set as this is an example. The Dow Jones Industrial Average basically sums the stock prices of 30 major publicly-traded companies. Here, we look one period of US economic history and base our stock choices roughly on the Dow Jones leading into the 2007-2009 financial crisis.  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(igraph)
+library(TDA)
+library(BatchGetSymbols)
+library(reshape2)
+library(TDAstats)
+```
+
+
+
+## Get stock data
+We can get stock data using several nice R libraries, like BatchGetSymbols. This uses a stock data API of your choice (or the default) to get historical prices given the ticker or symbol list. 
+
+From Nov 21, 2005 to Feb 19, 2008, the Dow consisted of a steady set of stocks, and on Feb 19 Altria and Honeywell were dropped and replaced with Bank of America and Chevron. Then on Sept 22 2008 AIG was replaced by Kraft Foods, and on June 8 2009 Citigroup and General Motors were dropped and replaced by Cisco Systems and Travelers. Let's first analyze the stable years of 2006 and 2007 plus change, the run-up to the crisis.
+
+
+
+```{r stockdata, echo = TRUE, message=FALSE}
+
+first.date.finance <- as.Date('2005/11/22')
+last.date.finance <- as.Date('2008/02/19')
+tickers <- c('MMM','AA','MO','AXP','AIG','T','BA','CAT','C','KO','DWDP','XOM','GE','GM','HD','HP','HON','IBM','INTC','JNJ','JPM','MCD','MRK','MSFT','PFE','PG','UTX','VZ','WMT','DIS')
+data.finance <- BatchGetSymbols(tickers = tickers,
+                        first.date = first.date.finance,
+                        last.date = last.date.finance)
+widestock_finance <- dcast(data.finance$df.tickers[,6:8], ref.date ~ ticker, value.var="price.adjusted")
+```
+
+Let's also look at today's Dow, more or less. 
+```{r today}
+first.date.today <- as.Date('2013/11/01')
+last.date.today <- as.Date('2019/01/25')
+tickers <- c('MMM','AAPL','AXP','BA','CAT','CVX','CSCO','KO','DWDP','XOM','GS','HD','IBM','INTC','JNJ','JPM','MCD','MRK','MSFT','NKE','PFE','PG','TRV','UNH','UTX','VZ','V','WMT','WBA','DIS')
+data.today <- BatchGetSymbols(tickers = tickers,
+                        first.date = first.date.today,
+                        last.date = last.date.today)
+widestock_today <- dcast(data.today$df.tickers[,6:8], ref.date ~ ticker, value.var="price.adjusted")
+```
+
+We consider log returns rather than prices, as log returns are more stationary. 
+```{r logreturns for both periods}
+logrets_finance <- apply(widestock_finance[,2:length(widestock_finance)], 2, 
+                function(x) diff(log(x), lag=1))
+logrets_today <- apply(widestock_today[,2:length(widestock_today)], 2, 
+                function(x) diff(log(x), lag=1))
+```
+
+What shape is our data?
+```{r number of}
+dim(logrets_finance)
+dim(logrets_today)
+```
+Now let's loop through our observations and split it into sixty-three day chunks. Sixty-three days gives about a quarter in the business year of 252 days. 
+
+Timing note: using the R package "TDA", computation for the Vietoris-Rips complex using GUDHI or PHAT gets very long and so looking at quarters is easier for the impatient researcher. However, some research indicates that 15 or 20 day increments are preferable for analysis of network correlation -- and with Ripser as your background engine through the "TDAstats" package, this is feasible. (Twenty-one days give about one month of business days). We'll look at correlations between the stocks over these increments. 
+
+(Here I need to thank Fiona Jiang and Ayman Ahmed for their initial code; I've modified it but they started this!)
+```{r time window parameters}
+time_window = 63
+num_of_finance_days = length(logrets_finance[,1])
+num_time_points_fin = floor(num_of_finance_days/time_window)
+num_of_today_days = length(logrets_today[,1])
+num_time_points_today = floor(num_of_today_days/time_window)
+num_stocks_fin = length(colnames(logrets_finance))
+num_stocks_today = length(colnames(logrets_today))
+```
+
+
+Then we can make correlation matrices for each of these time windows. I'll split each dataframe into pieces the length of our time window and then apply correlation and a shift to make it a distance matrix.
+
+```{r use split instead}
+logrets_today.split <- split(as.data.frame(logrets_today), (seq(nrow(logrets_today)) - 1) %/% time_window) 
+cor_mat_today <- lapply(logrets_today.split, cor)
+dis_mat_today = lapply(cor_mat_today, function(x) {sqrt(2*(1-x))})
+
+logrets_fin.split <- split(as.data.frame(logrets_finance), (seq(nrow(logrets_finance)) - 1) %/% time_window) 
+cor_mat_fin <- lapply(logrets_fin.split, cor)
+dis_mat_fin = lapply(cor_mat_fin, function(x) {sqrt(2*(1-x))})
+```
+
+The dissimilarity matrices give perfectly anticorrelated stocks distance 2 and perfectly correlated stocks distance 0, which is what we feel makes sense here. (Correlation isn't always positive, so this is a shift to make it a distance.)
+
+## Using TDAstats to plot the persistent homology
+
+Here I'll use the TDAstats package to compute persistent homology and plot barcodes. I'll time the barcode calculation as well.
+
+```{r make TDAstats list of barcodes}
+TS_barcode_function <- function(input){
+  barcode_output <- calculate_homology(input, format="distmat")
+}
+
+pm <- proc.time()
+TS_barcodes_list_today <- lapply(dis_mat_today,TS_barcode_function)
+
+TS_barcodes_list_fin <- lapply(dis_mat_fin,TS_barcode_function)
+total_time <- proc.time()-pm
+print(total_time)
+```
+
+Now loop through and plot:
+```{r plot TDAstats barcodes for financial crisis}
+lapply(TS_barcodes_list_fin, function(x){plot_barcode(x)})
+  
+```
+```{r plot TDAstats barcodes for last five years}
+lapply(TS_barcodes_list_today, function(x){plot_barcode(x)})
+  
+```
+
+I'd like to be able to set the axes so that these pictures are more directly comparable and also set titles, but this probably reflects my lack of experience with the TDAstats package.
+
+## Compare with package TDA
+
+Here I'll use the 'TDA' package to compute persistent homology and plot barcodes.
+```{r make TDA list of barcodes}
+barcode_function <- function(input){
+  barcode_output <- ripsDiag(input,maxscale=2,maxdimension = 3,dist="arbitrary",library=c("GUDHI", "PHAT"))
+}
+pm <- proc.time()
+barcodes_list_today <- lapply(dis_mat_today,barcode_function)
+barcodes_list_fin <- lapply(dis_mat_fin,barcode_function)
+total_time <- proc.time()-pm
+print(total_time)
+```
+
+
+```{r plot barcodes for financial crisis}
+for (j in seq(from=1, to=num_time_points_fin)){
+  # plotting barcodes
+  plot(barcodes_list_fin[[j]][["diagram"]],barcode = TRUE, main = widestock_finance$ref.date[j*time_window])
+}
+```
+
+
+```{r plot barcodes for last five years}
+for (j in seq(from=1, to=num_time_points_today)){
+  # plotting barcodes
+  plot(barcodes_list_today[[j]][["diagram"]],barcode = TRUE, main = widestock_today$ref.date[j*time_window])
+}
+```
+
+
+
