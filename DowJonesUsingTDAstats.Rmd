@@ -13,6 +13,7 @@ library(TDA)
 library(BatchGetSymbols)
 library(reshape2)
 library(TDAstats)
+library(ggplot2)
 ```
 
 
@@ -59,6 +60,12 @@ What shape is our data?
 dim(logrets_finance)
 dim(logrets_today)
 ```
+For some reason I get one NA appearing in several stocks. Since it's one observation out of many, for today I'm going to replace that NA with zero.
+```{r replaceNAs}
+logrets_finance[is.na(logrets_finance)] <- 0
+logrets_today[is.na(logrets_today)] <- 0
+```
+
 Now let's loop through our observations and split it into sixty-three day chunks. Sixty-three days gives about a quarter in the business year of 252 days. 
 
 Timing note: using the R package "TDA", computation for the Vietoris-Rips complex using GUDHI or PHAT gets very long and so looking at quarters is easier for the impatient researcher. However, some research indicates that 15 or 20 day increments are preferable for analysis of network correlation -- and with Ripser as your background engine through the "TDAstats" package, this is feasible. (Twenty-one days give about one month of business days). We'll look at correlations between the stocks over these increments. 
@@ -108,15 +115,19 @@ print(total_time_TDAstats)
 
 Now loop through and plot:
 ```{r plot TDAstats barcodes for financial crisis}
-lapply(TS_barcodes_list_fin, function(x){plot_barcode(x)})
-  
+my_plot_function_fin <- function(idx){plot_persist(TS_barcodes_list_fin[[idx]]) + ggtitle(widestock_finance$ref.date[idx*time_window])+ xlim(c(0,2)) + ylim(c(0,2))}
+
+lapply( seq_along(TS_barcodes_list_fin),my_plot_function_fin)
+# mapply is giving me trouble today
 ```
 ```{r plot TDAstats barcodes for last five years}
-lapply(TS_barcodes_list_today, function(x){plot_barcode(x)})
-  
+my_plot_function_today <- function(idx){plot_persist(TS_barcodes_list_today[[idx]]) + ggtitle(widestock_today$ref.date[idx*time_window])+ xlim(c(0,2)) + ylim(c(0,2))}
+
+lapply(seq_along(TS_barcodes_list_today),my_plot_function_today)
+
 ```
 
-I'd like to be able to set the axes so that these pictures are more directly comparable and also set titles, but this probably reflects my lack of experience with the TDAstats package.
+We used features of ggplot to add a label and set the axes to constant lengths to enable comparison. If you're running through this code on your own, it's instructive to flip through the images like a movie: when the dimension-one features start sliding down and to the left, and dimension-two features start to appear, there is often trouble in the stock market. 
 
 ## Compare with package TDA
 
@@ -134,7 +145,7 @@ print(total_time_TDA)
 
 
 ```{r plot barcodes for financial crisis}
-for (j in seq(from=1, to=num_time_points_fin)){
+for (j in 1:num_time_points_fin){
   # plotting barcodes
   plot(barcodes_list_fin[[j]][["diagram"]],barcode = TRUE, main = widestock_finance$ref.date[j*time_window])
 }
@@ -142,7 +153,7 @@ for (j in seq(from=1, to=num_time_points_fin)){
 
 
 ```{r plot barcodes for last five years}
-for (j in seq(from=1, to=num_time_points_today)){
+for (j in 1:num_time_points_today){
   # plotting barcodes
   plot(barcodes_list_today[[j]][["diagram"]],barcode = TRUE, main = widestock_today$ref.date[j*time_window])
 }
@@ -158,8 +169,9 @@ print(total_time_TDAstats)
 ```
 
 
-## To-do
-Add Wasserstein example. 
+## Wasserstein distance
+
+The visual analysis is nice but remains qualitative without introducing something like Wasserstein distance. 
 
 ## Further research, if you're curious
 The idea here is based on Marian Gidea's paper ``Topology Data Analysis of Critical Transitions in Financial Networks'', which one can find at *https://arxiv.org/abs/1701.06081*. With my students at the University of Minnesota, we're extending this work and have several papers in progress.
