@@ -5,7 +5,7 @@ date: "January 26, 2019"
 output: html_document
 ---
 
-This file contains an example of the use of persistent homology on real data. We consider a small data set as this is an example. The Dow Jones Industrial Average basically sums the stock prices of 30 major publicly-traded companies. Here, we look one period of US economic history and base our stock choices roughly on the Dow Jones leading into the 2007-2009 financial crisis.  
+This file contains an example of the use of persistent homology on real data. We consider a small data set as this is an example. The Dow Jones Industrial Average basically sums the stock prices of 30 major publicly-traded companies. Here, we look one period of US economic history and base our stock choices roughly on the Dow Jones leading into the 2007-2009 financial crisis. To see the crisis, we'll keep going with the same stocks a bit past 2009.  
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -27,8 +27,8 @@ From Nov 21, 2005 to Feb 19, 2008, the Dow consisted of a steady set of stocks, 
 
 ```{r stockdata, echo = TRUE, message=FALSE}
 
-first.date.finance <- as.Date('2005/11/22')
-last.date.finance <- as.Date('2008/02/19')
+first.date.finance <- as.Date('2006/01/01')
+last.date.finance <- as.Date('2011/02/19')
 tickers <- c('MMM','AA','MO','AXP','AIG','T','BA','CAT','C','KO','DWDP','XOM','GE','GM','HD','HP','HON','IBM','INTC','JNJ','JPM','MCD','MRK','MSFT','PFE','PG','UTX','VZ','WMT','DIS')
 data.finance <- BatchGetSymbols(tickers = tickers,
                         first.date = first.date.finance,
@@ -38,7 +38,7 @@ widestock_finance <- dcast(data.finance$df.tickers[,6:8], ref.date ~ ticker, val
 
 Let's also look at today's Dow, more or less. 
 ```{r today}
-first.date.today <- as.Date('2013/11/01')
+first.date.today <- as.Date('2014/01/01')
 last.date.today <- as.Date('2019/01/25')
 tickers <- c('MMM','AAPL','AXP','BA','CAT','CVX','CSCO','KO','DWDP','XOM','GS','HD','IBM','INTC','JNJ','JPM','MCD','MRK','MSFT','NKE','PFE','PG','TRV','UNH','UTX','VZ','V','WMT','WBA','DIS')
 data.today <- BatchGetSymbols(tickers = tickers,
@@ -66,13 +66,13 @@ logrets_finance[is.na(logrets_finance)] <- 0
 logrets_today[is.na(logrets_today)] <- 0
 ```
 
-Now let's loop through our observations and split it into sixty-three day chunks. Sixty-three days gives about a quarter in the business year of 252 days. 
+Now let's loop through our observations and split it into sixty-three day chunks. Sixty-three days gives about a quarter in the business year of 252 days. We could also look at about 21 days, which roughly splits this into month-long intervals. Check the time_window parameter below to see what this version uses! 
 
 Timing note: using the R package "TDA", computation for the Vietoris-Rips complex using GUDHI or PHAT gets very long and so looking at quarters is easier for the impatient researcher. However, some research indicates that 15 or 20 day increments are preferable for analysis of network correlation -- and with Ripser as your background engine through the "TDAstats" package, this is feasible. (Twenty-one days give about one month of business days). We'll look at correlations between the stocks over these increments. 
 
 (Here I need to thank Fiona Jiang and Ayman Ahmed for their initial code; I've modified it but they started this!)
 ```{r time window parameters}
-time_window = 63
+time_window = 21
 num_of_finance_days = length(logrets_finance[,1])
 num_time_points_fin = floor(num_of_finance_days/time_window)
 num_of_today_days = length(logrets_today[,1])
@@ -171,7 +171,108 @@ print(total_time_TDAstats)
 
 ## Wasserstein distance
 
-The visual analysis is nice but remains qualitative without introducing something like Wasserstein distance. 
+The visual analysis is nice but remains qualitative without introducing something like Wasserstein distance. One thing we can do is graph the Wasserstein distances from barcode to barcode. The TDAstats program has some Wasserstein functionality built in, but it seems to be via permutation testing, which I haven't yet explored. The TDA package has Wasserstein distance as well, simply as a function of two diagrams. Because the formats of the persistent homology output for TDA and TDAstats are harmonious, we can simply use the wasserstein() command from TDA on either set of outputs.
+
+### Wasserstein distance using TDA package
+First, we'll just look at Wasserstein distance from the initial point in the time series analysis. We'll build a matrix with columns corresponding to dimension of feature.
+
+
+Financial crisis section:
+```{r Wasserstein compared to initial time TDA}
+
+wass_fin <- as.data.frame(widestock_finance[seq(1, nrow(widestock_finance), time_window), ]$ref.date)
+colnames(wass_fin) <- c("date")
+
+from_point_1 <- function(j,d){wasserstein(barcodes_list_fin[[1]][["diagram"]], barcodes_list_fin[[j]][["diagram"]],d)} 
+
+wass_fin$dim_1 <-unlist(mapply(from_point_1, seq_along(barcodes_list_fin),1))
+wass_fin$dim_2 <-unlist(mapply(from_point_1, seq_along(barcodes_list_fin),2))
+#wass_fin$dim_3 <-unlist(mapply(from_point_1, seq_along(barcodes_list_fin),3))
+
+```
+
+```{r plot finance TDA from time one }
+ggplot(wass_fin, aes(date)) +
+  geom_line(aes(y = dim_1, colour = "dim_1")) +
+  geom_line(aes(y = dim_2, colour = "dim_2")) +
+  ggtitle("Wasserstein distance from 2006")
+```
+
+```{r Wasserstein finance initial time TDAstats output}
+
+wass_fin <- as.data.frame(widestock_finance[seq(1, nrow(widestock_finance), time_window), ]$ref.date)
+colnames(wass_fin) <- c("date")
+
+from_point_1_ts <- function(j,d){wasserstein(TS_barcodes_list_fin[[1]], TS_barcodes_list_fin[[j]],d)} 
+
+wass_fin$ts_dim_1 <-unlist(mapply(from_point_1_ts, seq_along(TS_barcodes_list_fin),1))
+wass_fin$ts_dim_2 <-unlist(mapply(from_point_1_ts, seq_along(TS_barcodes_list_fin),2))
+#wass_fin$dim_3 <-unlist(mapply(from_point_1, seq_along(barcodes_list_fin),3))
+
+```
+
+```{r Plot wass financial from time one TDAstats}
+ggplot(wass_fin, aes(date)) +
+  geom_line(aes(y = ts_dim_1, colour = "dim_1")) +
+  geom_line(aes(y = ts_dim_2, colour = "dim_2")) +
+  ggtitle("Wasserstein distance from late 2005")
+```
+Another way to do it is look at the distance from each time to the next.
+```{r Wasserstein financial compared to neighbor time TDA}
+
+from_point_j <- function(j,d){ifelse(j>1,wasserstein(barcodes_list_fin[[j-1]][["diagram"]], barcodes_list_fin[[j]][["diagram"]],d),0)} 
+
+wass_fin$j_dim_1 <-unlist(mapply(from_point_j, seq_along(barcodes_list_fin),1))
+wass_fin$j_dim_2 <-unlist(mapply(from_point_j, seq_along(barcodes_list_fin),2))
+
+
+```
+
+```{r plot neighbor wasserstein financial TDA}
+ggplot(wass_fin, aes(date)) +
+    geom_line(aes(y = j_dim_1, colour = "dimension 1")) +
+    geom_line(aes(y = j_dim_2, colour = "dimension 2")) +
+    ggtitle("Wasserstein distance from previous period")
+```
+
+
+Today section:
+```{r Wasserstein today initial time TDA}
+
+wass_today <- as.data.frame(widestock_today[seq(1, nrow(widestock_today), time_window), ]$ref.date)
+colnames(wass_today) <- c("date")
+
+from_point_1 <- function(j,d){wasserstein(barcodes_list_today[[1]][["diagram"]], barcodes_list_today[[j]][["diagram"]],d)} 
+
+wass_today$dim_1 <-unlist(mapply(from_point_1, seq_along(barcodes_list_today),1))
+wass_today$dim_2 <-unlist(mapply(from_point_1, seq_along(barcodes_list_today),2))
+#wass_today$dim_3 <-unlist(mapply(from_point_1, seq_along(barcodes_list_today),3))
+
+```
+
+```{r Plot Wass today TDA from time one}
+ggplot(wass_today, aes(date)) +
+  geom_line(aes(y = dim_1, colour = "dim_1")) +
+  geom_line(aes(y = dim_2, colour = "dim_2")) +
+  ggtitle("Wasserstein distance from late 2013")
+```
+Another way to do it is look at the distance from each time to the next.
+```{r Wasserstein today neighbor time TDA}
+
+from_point_j <- function(j,d){ifelse(j>1,wasserstein(barcodes_list_today[[j-1]][["diagram"]], barcodes_list_today[[j]][["diagram"]],d),0)} 
+
+wass_today$j_dim_1 <-unlist(mapply(from_point_j, seq_along(barcodes_list_today),1))
+wass_today$j_dim_2 <-unlist(mapply(from_point_j, seq_along(barcodes_list_today),2))
+
+
+```
+
+```{r plot neighbor wasserstein today TDA output}
+ggplot(wass_today, aes(date)) +
+    geom_line(aes(y = j_dim_1, colour = "dimension 1")) +
+    geom_line(aes(y = j_dim_2, colour = "dimension 2")) +
+    ggtitle("Wasserstein distance from previous period")
+```
 
 ## Further research, if you're curious
 The idea here is based on Marian Gidea's paper ``Topology Data Analysis of Critical Transitions in Financial Networks'', which one can find at *https://arxiv.org/abs/1701.06081*. With my students at the University of Minnesota, we're extending this work and have several papers in progress.
